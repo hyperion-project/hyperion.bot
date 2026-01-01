@@ -11,7 +11,7 @@ export default async function trigger(context) {
     return;
   }
 
-  const permissions = await octokit.repos.getCollaboratorPermissionLevel(
+  const permissions = await octokit.rest.repos.getCollaboratorPermissionLevel(
     context.repo({
       username: user.login,
     })
@@ -55,7 +55,7 @@ export default async function trigger(context) {
   log('dispatchResponse: ', dispatchResp);
 
   if (context.payload.action === "created") {
-    const reactResp = await octokit.reactions.createForIssueComment({
+    const reactResp = await octokit.rest.reactions.createForIssueComment({
       owner,
       repo,
       comment_id: context.payload.comment.id,

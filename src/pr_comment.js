@@ -40,14 +40,14 @@ export default async function pr_comment(context) {
     }
 
     const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.opened) });
-    return context.octokit.issues.createComment(params);
+    return context.octokit.rest.issues.createComment(params);
   } else if (action === "synchronize") {
     if (!config.PullRequest.synchronize) {
       return;
     }
 
     const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.synchronize) });
-    return context.octokit.issues.createComment(params);
+    return context.octokit.rest.issues.createComment(params);
   }
 
   return;

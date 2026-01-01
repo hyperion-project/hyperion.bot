@@ -27,12 +27,12 @@ export default async function issue(context) {
       return;
     }
 
-    await context.octokit.issues.update(
+    await context.octokit.rest.issues.update(
       context.issue({
         state: 'closed'
     }))
     
-    return context.octokit.issues.createComment(
+    return context.octokit.rest.issues.createComment(
       context.issue({
        body: await replaceTemplateVariables(context, config.Issues.opened)
       })
