@@ -8,6 +8,7 @@
   "author": "Hyperion-Project <admin@hyperion-project.org>",
   "license": "MIT",
   "repository": "https://github.com/hyperion-project/hyperion.bot",
+  "type": "module",
   "scripts": {
     "dev": "nodemon --exec \"npm start\"",
     "start": "probot run ./index.js",

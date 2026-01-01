@@ -14,7 +14,7 @@ const replaceTemplateVariables = async function(context, message) {
   return output;
 };
 
-module.exports = async function issue(context) {
+export default async function issue(context) {
   const config = (await context.config(CONFIG_NAME)) || {};
   if (!config.Issues) {
     return;

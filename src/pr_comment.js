@@ -1,4 +1,4 @@
-const sleep = require("system-sleep");
+import sleep from "system-sleep";
 
 const CONFIG_NAME = "pr_comment.yml";
 
@@ -27,7 +27,7 @@ const getRunID = async function(context) {
   return workflow_runs[0].id;
 };
 
-module.exports = async function pr_comment(context) {
+export default async function pr_comment(context) {
   const config = (await context.config(CONFIG_NAME)) || {};
   if (!config.PullRequest) {
     return;

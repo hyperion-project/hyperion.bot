@@ -1,7 +1,7 @@
-const { Octokit } = require("@octokit/rest")
-const { createAppAuth } = require("@octokit/auth-app")
+import { Octokit } from "@octokit/rest";
+import { createAppAuth } from "@octokit/auth-app";
 
-module.exports = async function trigger(context) {
+export default async function trigger(context) {
   const { octokit, log } = context;
   const { comment, repository } = context.payload;
   const [owner, repo] = repository.full_name.split('/');
