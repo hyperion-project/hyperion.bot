@@ -38,7 +38,7 @@ jobs:
             const yaml = require('js-yaml');
             const fs = require('fs');
             const path = require('path');
-            
+
             // Helper function to get config file
             async function getConfig(filename) {
               try {
@@ -55,13 +55,13 @@ jobs:
                 return null;
               }
             }
-            
+
             // Helper function to replace template variables for PR comments
             async function replaceTemplateVariablesPR(message, pr) {
               let output = message;
               output = output.replace(/\$AUTHOR/g, pr.user.login);
               output = output.replace(/\$REPO_FULL_NAME/g, context.payload.repository.full_name);
-              
+
               // Get latest workflow run ID
               try {
                 const { data } = await github.rest.actions.listWorkflowRunsForRepo({
@@ -75,10 +75,10 @@ jobs:
               } catch (error) {
                 console.log('Error getting workflow runs:', error.message);
               }
-              
+
               return output;
             }
-            
+
             // Helper function to replace template variables for issues
             function replaceTemplateVariablesIssue(message, issue) {
               let output = message;
@@ -86,27 +86,27 @@ jobs:
               output = output.replace(/\$REPO_FULL_NAME/g, context.payload.repository.full_name);
               return output;
             }
-            
+
             // Handle PR opened/synchronize events
             if (context.eventName === 'pull_request') {
               const action = context.payload.action;
               const pr = context.payload.pull_request;
-              
+
               console.log(`Processing pull_request.${action} event for PR #${pr.number}`);
-              
+
               const config = await getConfig('pr_comment.yml');
               if (!config || !config.PullRequest) {
                 console.log('No pr_comment.yml config found or PullRequest section missing');
                 return;
               }
-              
+
               let message = null;
               if (action === 'opened' && config.PullRequest.opened) {
                 message = config.PullRequest.opened;
               } else if (action === 'synchronize' && config.PullRequest.synchronize) {
                 message = config.PullRequest.synchronize;
               }
-              
+
               if (message) {
                 const body = await replaceTemplateVariablesPR(message, pr);
                 await github.rest.issues.createComment({
@@ -118,24 +118,24 @@ jobs:
                 console.log(`Comment posted to PR #${pr.number}`);
               }
             }
-            
+
             // Handle issues opened event
             if (context.eventName === 'issues' && context.payload.action === 'opened') {
               const issue = context.payload.issue;
-              
+
               console.log(`Processing issues.opened event for issue #${issue.number}`);
-              
+
               const config = await getConfig('issues.yml');
               if (!config || !config.Issues || !config.Issues.opened) {
                 console.log('No issues.yml config found or Issues.opened section missing');
                 return;
               }
-              
+
               // Check if issue contains required template marker
               const body = issue.body || '';
               if (!body.includes("<!-- Please don't delete this template or we'll close your issue -->")) {
                 console.log(`Issue #${issue.number} does not contain required template, closing it`);
-                
+
                 // Close the issue
                 await github.rest.issues.update({
                   owner: context.repo.owner,
@@ -143,7 +143,7 @@ jobs:
                   issue_number: issue.number,
                   state: 'closed'
                 });
-                
+
                 // Post comment
                 const commentBody = replaceTemplateVariablesIssue(config.Issues.opened, issue);
                 await github.rest.issues.createComment({
@@ -152,45 +152,45 @@ jobs:
                   issue_number: issue.number,
                   body: commentBody
                 });
-                
+
                 console.log(`Issue #${issue.number} closed and commented`);
               }
             }
-            
+
             // Handle issue_comment events
             if (context.eventName === 'issue_comment') {
               const comment = context.payload.comment;
               const user = comment.user;
-              
+
               console.log(`Processing issue_comment.${context.payload.action} event`);
-              
+
               // Only process comments from real users
               if (user.type !== 'User') {
                 console.log('Comment is not from a User, skipping');
                 return;
               }
-              
+
               // Check user permissions
               const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 username: user.login
               });
-              
+
               const level = permission.permission;
               if (level !== 'admin' && level !== 'write') {
                 console.log(`User ${user.login} does not have sufficient permissions (${level})`);
                 return;
               }
-              
+
               // Check if comment contains the trigger phrase
               if (!comment.body.includes('@Hyperion-Bot build APT')) {
                 console.log('Comment does not contain trigger phrase');
                 return;
               }
-              
+
               console.log('Trigger phrase detected, processing APT build request');
-              
+
               // Extract SHA/ref from comment
               const hashtag_match = comment.body.match(/(?<!@ )@ \S+/g);
               let hashtag = context.payload.repository.default_branch;
@@ -198,11 +198,11 @@ jobs:
                 hashtag = hashtag_match.pop().replace('@ ', '');
                 console.log('SHA/ref:', hashtag);
               }
-              
+
               // Trigger workflow dispatch
               const { Octokit } = require('@octokit/rest');
               const { createAppAuth } = require('@octokit/auth-app');
-              
+
               // Use GitHub App authentication if available, otherwise use token
               let octokit;
               if (process.env.APP_ID && process.env.PRIVATE_KEY) {
@@ -218,7 +218,7 @@ jobs:
                 // Fallback to using the GitHub token from the context
                 octokit = github;
               }
-              
+
               try {
                 await octokit.rest.actions.createWorkflowDispatch({
                   owner: context.repo.owner,
@@ -233,7 +233,7 @@ jobs:
               } catch (error) {
                 console.log('Error triggering workflow dispatch:', error.message);
               }
-              
+
               // Add rocket reaction to comment (only on created, not edited)
               if (context.payload.action === 'created') {
                 try {
