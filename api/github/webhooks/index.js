@@ -1,6 +1,9 @@
-const { createNodeMiddleware, createProbot } = require("probot");
+// api/github/webhooks/index.js
+import { createNodeMiddleware, createProbot } from "probot";
 
-const app = require("../../../app");
-const probot = createProbot();
+import app from "../../../index.js";
 
-module.exports = createNodeMiddleware(app, { probot, webhooksPath: '/api/github/webhooks' });
+export default await createNodeMiddleware(app, {
+  probot: createProbot(),
+  webhooksPath: "/api/github/webhooks",
+});
