@@ -1,0 +1,251 @@
+name: Hyperion Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install @octokit/rest@^19.0.8
+          npm install @octokit/auth-app@^4.0.12
+          npm install js-yaml@^4.1.0
+
+      - name: Run bot
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const yaml = require('js-yaml');
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Helper function to get config file
+            async function getConfig(filename) {
+              try {
+                const { data } = await github.rest.repos.getContent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  path: `.github/${filename}`,
+                  ref: context.payload.repository.default_branch
+                });
+                const content = Buffer.from(data.content, 'base64').toString('utf8');
+                return yaml.load(content);
+              } catch (error) {
+                console.log(`Config file ${filename} not found or error reading it:`, error.message);
+                return null;
+              }
+            }
+            
+            // Helper function to replace template variables for PR comments
+            async function replaceTemplateVariablesPR(message, pr) {
+              let output = message;
+              output = output.replace(/\$AUTHOR/g, pr.user.login);
+              output = output.replace(/\$REPO_FULL_NAME/g, context.payload.repository.full_name);
+              
+              // Get latest workflow run ID
+              try {
+                const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  per_page: 1
+                });
+                if (data.workflow_runs && data.workflow_runs.length > 0) {
+                  output = output.replace(/\$RUN_ID/g, data.workflow_runs[0].id);
+                }
+              } catch (error) {
+                console.log('Error getting workflow runs:', error.message);
+              }
+              
+              return output;
+            }
+            
+            // Helper function to replace template variables for issues
+            function replaceTemplateVariablesIssue(message, issue) {
+              let output = message;
+              output = output.replace(/\$AUTHOR/g, issue.user.login);
+              output = output.replace(/\$REPO_FULL_NAME/g, context.payload.repository.full_name);
+              return output;
+            }
+            
+            // Handle PR opened/synchronize events
+            if (context.eventName === 'pull_request') {
+              const action = context.payload.action;
+              const pr = context.payload.pull_request;
+              
+              console.log(`Processing pull_request.${action} event for PR #${pr.number}`);
+              
+              const config = await getConfig('pr_comment.yml');
+              if (!config || !config.PullRequest) {
+                console.log('No pr_comment.yml config found or PullRequest section missing');
+                return;
+              }
+              
+              let message = null;
+              if (action === 'opened' && config.PullRequest.opened) {
+                message = config.PullRequest.opened;
+              } else if (action === 'synchronize' && config.PullRequest.synchronize) {
+                message = config.PullRequest.synchronize;
+              }
+              
+              if (message) {
+                const body = await replaceTemplateVariablesPR(message, pr);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: body
+                });
+                console.log(`Comment posted to PR #${pr.number}`);
+              }
+            }
+            
+            // Handle issues opened event
+            if (context.eventName === 'issues' && context.payload.action === 'opened') {
+              const issue = context.payload.issue;
+              
+              console.log(`Processing issues.opened event for issue #${issue.number}`);
+              
+              const config = await getConfig('issues.yml');
+              if (!config || !config.Issues || !config.Issues.opened) {
+                console.log('No issues.yml config found or Issues.opened section missing');
+                return;
+              }
+              
+              // Check if issue contains required template marker
+              const body = issue.body || '';
+              if (!body.includes("<!-- Please don't delete this template or we'll close your issue -->")) {
+                console.log(`Issue #${issue.number} does not contain required template, closing it`);
+                
+                // Close the issue
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed'
+                });
+                
+                // Post comment
+                const commentBody = replaceTemplateVariablesIssue(config.Issues.opened, issue);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: commentBody
+                });
+                
+                console.log(`Issue #${issue.number} closed and commented`);
+              }
+            }
+            
+            // Handle issue_comment events
+            if (context.eventName === 'issue_comment') {
+              const comment = context.payload.comment;
+              const user = comment.user;
+              
+              console.log(`Processing issue_comment.${context.payload.action} event`);
+              
+              // Only process comments from real users
+              if (user.type !== 'User') {
+                console.log('Comment is not from a User, skipping');
+                return;
+              }
+              
+              // Check user permissions
+              const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: user.login
+              });
+              
+              const level = permission.permission;
+              if (level !== 'admin' && level !== 'write') {
+                console.log(`User ${user.login} does not have sufficient permissions (${level})`);
+                return;
+              }
+              
+              // Check if comment contains the trigger phrase
+              if (!comment.body.includes('@Hyperion-Bot build APT')) {
+                console.log('Comment does not contain trigger phrase');
+                return;
+              }
+              
+              console.log('Trigger phrase detected, processing APT build request');
+              
+              // Extract SHA/ref from comment
+              const hashtag_match = comment.body.match(/(?<!@ )@ \S+/g);
+              let hashtag = context.payload.repository.default_branch;
+              if (hashtag_match) {
+                hashtag = hashtag_match.pop().replace('@ ', '');
+                console.log('SHA/ref:', hashtag);
+              }
+              
+              // Trigger workflow dispatch
+              const { Octokit } = require('@octokit/rest');
+              const { createAppAuth } = require('@octokit/auth-app');
+              
+              // Use GitHub App authentication if available, otherwise use token
+              let octokit;
+              if (process.env.APP_ID && process.env.PRIVATE_KEY) {
+                octokit = new Octokit({
+                  authStrategy: createAppAuth,
+                  auth: {
+                    appId: process.env.APP_ID,
+                    privateKey: process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
+                    installationId: context.payload.installation.id,
+                  }
+                });
+              } else {
+                // Fallback to using the GitHub token from the context
+                octokit = github;
+              }
+              
+              try {
+                await octokit.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: 'apt.yml',
+                  ref: context.payload.repository.default_branch,
+                  inputs: {
+                    head_sha: hashtag
+                  }
+                });
+                console.log('Workflow dispatch triggered successfully');
+              } catch (error) {
+                console.log('Error triggering workflow dispatch:', error.message);
+              }
+              
+              // Add rocket reaction to comment (only on created, not edited)
+              if (context.payload.action === 'created') {
+                try {
+                  await github.rest.reactions.createForIssueComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: comment.id,
+                    content: 'rocket'
+                  });
+                  console.log('Rocket reaction added to comment');
+                } catch (error) {
+                  console.log('Error adding reaction:', error.message);
+                }
+              }
+            }

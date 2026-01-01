@@ -1,0 +1,12 @@
+# Example configuration for issue handling
+# Place this file in your repository at .github/issues.yml
+
+Issues:
+  opened: |
+    Hello @$AUTHOR,
+    
+    Thank you for opening this issue. However, it appears that you did not use the issue template.
+    
+    Please create a new issue using the proper template so we can better assist you.
+    
+    This issue will be closed automatically. Please reopen with the template filled out.

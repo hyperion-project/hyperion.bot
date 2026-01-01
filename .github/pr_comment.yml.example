@@ -1,0 +1,18 @@
+# Example configuration for PR comments
+# Place this file in your repository at .github/pr_comment.yml
+
+PullRequest:
+  opened: |
+    Thank you @$AUTHOR for opening this pull request!
+    
+    Your PR will be reviewed soon. In the meantime, please ensure:
+    - [ ] Your code follows the project's coding standards
+    - [ ] Tests have been added/updated
+    - [ ] Documentation has been updated if needed
+    
+    You can check the status of the automated checks at: https://github.com/$REPO_FULL_NAME/actions/runs/$RUN_ID
+  
+  synchronize: |
+    Thank you @$AUTHOR for updating this pull request!
+    
+    The automated checks will run again. You can monitor them at: https://github.com/$REPO_FULL_NAME/actions/runs/$RUN_ID
