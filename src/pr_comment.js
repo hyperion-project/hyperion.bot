@@ -16,18 +16,36 @@ const replaceTemplateVariables = async function(context, message) {
 
 const getRunID = async function(context) {
   const [owner, repo] = context.payload.repository.full_name.split('/');
-  const commit_sha = context.payload.pull_request.head.sha;
+  const branch = context.payload.pull_request.head.ref;
 
-  const workflow_runs = (await context.octokit.request(
-    "GET /repos/{owner}/{repo}/actions/runs",
-    {
-      owner,
-      repo,
-      head_sha: commit_sha,
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
+    const response = await context.octokit.request(
+      "GET /repos/{owner}/{repo}/actions/runs",
+      {
+        owner,
+        repo,
+        branch: branch,
+        per_page: 10
+      }
+    );
+
+    const workflow_runs = response.data.workflow_runs;
+
+    // Finde den ersten Run, der NICHT CodeQL ist
+    const validRun = workflow_runs.find(run => !run.name.includes('CodeQL'));
+
+    if (validRun) {
+      return validRun.id;
     }
-  )).data.workflow_runs;
 
-  return workflow_runs[0]?.id;
+    attempts++;
+    if (attempts < maxAttempts) {
+      await sleep(2000);
+    }
+  }
 };
 
 export default async function pr_comment(context) {
