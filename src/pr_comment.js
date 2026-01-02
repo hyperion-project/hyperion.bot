@@ -18,34 +18,24 @@ const getRunID = async function(context) {
   const [owner, repo] = context.payload.repository.full_name.split('/');
   const branch = context.payload.pull_request.head.ref;
 
-  let attempts = 0;
-  const maxAttempts = 3;
+  // Warte 5 Sekunden, damit GitHub den Workflow Run registriert hat
+  await sleep(5000);
 
-  while (attempts < maxAttempts) {
-    const response = await context.octokit.request(
-      "GET /repos/{owner}/{repo}/actions/runs",
-      {
-        owner,
-        repo,
-        branch: branch,
-        per_page: 10
-      }
-    );
-
-    const workflow_runs = response.data.workflow_runs;
-
-    // Finde den ersten Run, der NICHT CodeQL ist
-    const validRun = workflow_runs.find(run => !run.name.includes('CodeQL'));
-
-    if (validRun) {
-      return validRun.id;
+  const response = await context.octokit.request(
+    "GET /repos/{owner}/{repo}/actions/runs",
+    {
+      owner,
+      repo,
+      branch: branch,
+      per_page: 10
     }
+  );
 
-    attempts++;
-    if (attempts < maxAttempts) {
-      await sleep(2000);
-    }
-  }
+  const workflow_runs = response.data.workflow_runs;
+
+  const validRun = workflow_runs.find(run => !run.name.includes('CodeQL'));
+
+  return validRun?.id;
 };
 
 export default async function pr_comment(context) {
