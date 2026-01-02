@@ -15,16 +15,19 @@ const replaceTemplateVariables = async function(context, message) {
 };
 
 const getRunID = async function(context) {
-  // wait 8 seconds before we request the workflows from GitHub
-  //sleep(8000);
-
   const [owner, repo] = context.payload.repository.full_name.split('/');
-  const workflow_runs = (await context.octokit.request("Get /repos/{owner}/{repo}/actions/runs", {
-    owner,
-    repo,
-  })).data.workflow_runs;
+  const commit_sha = context.payload.pull_request.head.sha;
 
-  return workflow_runs[0].id;
+  const workflow_runs = (await context.octokit.request(
+    "GET /repos/{owner}/{repo}/actions/runs",
+    {
+      owner,
+      repo,
+      head_sha: commit_sha,
+    }
+  )).data.workflow_runs;
+
+  return workflow_runs[0]?.id;
 };
 
 export default async function pr_comment(context) {
