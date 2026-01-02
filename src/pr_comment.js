@@ -1,6 +1,7 @@
-import sleep from "system-sleep";
-
 const CONFIG_NAME = "pr_comment.yml";
+
+// Non-blocking sleep function
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const replaceTemplateVariables = async function(context, message) {
   let output = message;
