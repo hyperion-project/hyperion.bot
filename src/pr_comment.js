@@ -1,66 +1,82 @@
-const CONFIG_NAME = "pr_comment.yml";
+const CONFIG_NAME = 'pr_comment.yml'
 
 // Non-blocking sleep function
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
-const replaceTemplateVariables = async function(context, message) {
-  let output = message;
-  output = output.replace(/\$AUTHOR/g, context.payload.pull_request.user.login);
+const replaceTemplateVariables = async function (context, message) {
+  let output = message
+  output = output.replace(/\$AUTHOR/g, context.payload.pull_request.user.login)
   output = output.replace(
     /\$REPO_FULL_NAME/g,
     context.payload.repository.full_name
-  );
-  output = output.replace(/\$RUN_ID/g, await getRunID(context));
+  )
+  output = output.replace(/\$RUN_ID/g, await getRunID(context))
 
-  return output;
-};
+  return output
+}
 
-const getRunID = async function(context) {
-  const [owner, repo] = context.payload.repository.full_name.split('/');
-  const branch = context.payload.pull_request.head.ref;
+const getRunID = async function (context) {
+  const [owner, repo] = context.payload.repository.full_name.split('/')
+  const headSha = context.payload.pull_request.head.sha
 
-  // Warte 5 Sekunden, damit GitHub den Workflow Run registriert hat
-  await sleep(5000);
+  // Retry up to 5 times with 5 second waits between attempts
+  const maxAttempts = 5
+  const waitTimeMs = 5000
 
-  const response = await context.octokit.request(
-    "GET /repos/{owner}/{repo}/actions/runs",
-    {
-      owner,
-      repo,
-      branch: branch,
-      per_page: 10
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Wait before first attempt to give GitHub time to register the workflow
+    if (attempt === 0) {
+      await sleep(waitTimeMs)
     }
-  );
 
-  const workflow_runs = response.data.workflow_runs;
+    const response = await context.octokit.request(
+      'GET /repos/{owner}/{repo}/actions/runs',
+      {
+        owner,
+        repo,
+        head_sha: headSha,
+        per_page: 10
+      }
+    )
 
-  const validRun = workflow_runs.find(run => !run.name.includes('CodeQL'));
+    const workflowRuns = response.data.workflow_runs
 
-  return validRun?.id;
-};
+    const validRun = workflowRuns.find(run => !run.name.includes('CodeQL'))
 
-export default async function pr_comment(context) {
-  const config = (await context.config(CONFIG_NAME)) || {};
+    if (validRun) {
+      return validRun.id
+    }
+
+    // Wait before next attempt if not the last one
+    if (attempt < maxAttempts - 1) {
+      await sleep(waitTimeMs)
+    }
+  }
+
+  // Return undefined if no valid run found after all attempts
+  return undefined
+}
+
+export default async function pr_comment (context) {
+  const config = (await context.config(CONFIG_NAME)) || {}
   if (!config.PullRequest) {
-    return;
+    return
   }
 
-  const action = context.payload.action;
-  if (action === "opened") {
+  const action = context.payload.action
+  if (action === 'opened') {
     if (!config.PullRequest.opened) {
-      return;
+      return
     }
 
-    const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.opened) });
-    return context.octokit.rest.issues.createComment(params);
-  } else if (action === "synchronize") {
+    const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.opened) })
+    return context.octokit.rest.issues.createComment(params)
+  } else if (action === 'synchronize') {
     if (!config.PullRequest.synchronize) {
-      return;
+      return
     }
 
-    const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.synchronize) });
-    return context.octokit.rest.issues.createComment(params);
+    const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.synchronize) })
+    return context.octokit.rest.issues.createComment(params)
   }
-
-  return;
-};
+}
