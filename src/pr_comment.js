@@ -24,8 +24,10 @@ const getRunID = async function (context) {
   const waitTimeMs = 5000
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Wait before querying to give GitHub time to register the workflow run
-    await sleep(waitTimeMs)
+    // Wait before first attempt to give GitHub time to register the workflow
+    if (attempt === 0) {
+      await sleep(waitTimeMs)
+    }
 
     const response = await context.octokit.request(
       'GET /repos/{owner}/{repo}/actions/runs',
@@ -43,6 +45,11 @@ const getRunID = async function (context) {
 
     if (validRun) {
       return validRun.id
+    }
+
+    // Wait before next attempt if not the last one
+    if (attempt < maxAttempts - 1) {
+      await sleep(waitTimeMs)
     }
   }
 
@@ -72,4 +79,4 @@ export default async function pr_comment (context) {
     const params = context.issue({ body: await replaceTemplateVariables(context, config.PullRequest.synchronize) })
     return context.octokit.rest.issues.createComment(params)
   }
-};
+}
